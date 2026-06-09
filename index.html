@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="mr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>वेळापत्रक अलर्ट सिस्टीम</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f4f7f6; padding: 20px; text-align: center; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); max-width: 400px; margin: 40px auto; }
+        button { background: #28a745; color: white; border: none; padding: 12px 24px; font-size: 16px; border-radius: 6px; cursor: pointer; transition: 0.2s; margin-top: 15px; font-weight: bold;}
+        button:hover { background: #218838; }
+        .status { margin-top: 20px; font-size: 20px; font-weight: bold; color: #333; }
+        .timer { font-size: 48px; font-weight: bold; margin: 20px 0; color: #dc3545; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>माझे वेळापत्रक (Routine Alerter)</h2>
+        <p>अभ्यास आणि खेळण्यासाठी प्रत्येकी १ तासाचा ऑटोमॅटिक अलर्ट.</p>
+        
+        <button id="startBtn">अलर्ट सुरू करा</button>
+        
+        <div class="status" id="currentSlot">सध्याचा स्लॉट: बंद आहे</div>
+        <div class="timer" id="timeRemaining">60:00</div>
+    </div>
+
+    <script>
+        // १ तास म्हणजे ३६०० सेकंद (१ तास ठेवण्यासाठी ३६०० करा, टेस्ट करण्यासाठी ६० सेकंद ठेवू शकता)
+        const ONE_HOUR = 3600; 
+        
+        const slots = [
+            { name: "अभ्यासाची वेळ (Study Time)", duration: ONE_HOUR, message: "चला! अभ्यासाची वेळ झाली आहे. पूर्ण लक्ष द्या." },
+            { name: "खेळण्याची वेळ (Play Time)", duration: ONE_HOUR, message: "आता खेळण्याची वेळ झाली आहे! थोडा आराम करा आणि खेळा." }
+        ];
+
+        let currentSlotIndex = 0;
+        let timeLeft = slots[currentSlotIndex].duration;
+        let timerInterval = null;
+        let swRegistration = null;
+
+        // १. मोबाईल बॅकग्राउंडमध्ये काम करण्यासाठी सर्व्हिस वर्कर रजिस्टर करणे
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js')
+            .then(reg => {
+                swRegistration = reg;
+                console.log("सर्व्हिस वर्कर तयार आहे.");
+            }).catch(err => console.error("सर्व्हिस वर्कर एरर:", err));
+        }
+
+        // २. युझरकडून नोटिफिकेशनची परवानगी घेणे आणि टाईमर सुरू करणे
+        document.getElementById('startBtn').addEventListener('click', async () => {
+            const permission = await Notification.requestPermission();
+            if (permission === 'granted') {
+                startRoutine();
+            } else {
+                alert("कृपया नोटिफिकेशनची परवानगी द्या, अन्यथा मोबाईलवर अलर्ट येणार नाही!");
+            }
+        });
+
+        function startRoutine() {
+            if (timerInterval) clearInterval(timerInterval);
+            
+            updateUI();
+            // पहिला स्लॉट सुरू झाल्यावर लगेच पहिली नोटिफिकेशन पाठवणे
+            triggerNotification(slots[currentSlotIndex].name, slots[currentSlotIndex].message);
+
+            timerInterval = setInterval(() => {
+                timeLeft--;
+
+                if (timeLeft <= 0) {
+                    // १ तास संपल्यावर दुसरा स्लॉट सुरू करणे (Looping)
+                    currentSlotIndex = (currentSlotIndex + 1) % slots.length;
+                    timeLeft = slots[currentSlotIndex].duration;
+                    
+                    // मोबाईलवर मुख्य रिंग/व्हाइब्रेशनसह अलर्ट पाठवणे
+                    triggerNotification(slots[currentSlotIndex].name, slots[currentSlotIndex].message);
+                }
+
+                updateUI();
+            }, 1000);
+        }
+
+        function updateUI() {
+            document.getElementById('currentSlot').innerText = `सध्याचा स्लॉट: ${slots[currentSlotIndex].name}`;
+            
+            const mins = Math.floor(timeLeft / 60).toString().padStart(2, '0');
+            const secs = (timeLeft % 60).toString().padStart(2, '0');
+            document.getElementById('timeRemaining').innerText = `${mins}:${secs}`;
+        }
+
+        // मोबाईल ऑपरेटिंग सिस्टीमवर नोटिफिकेशन पाठवणारे फंक्शन
+        function triggerNotification(title, body) {
+            if (swRegistration && Notification.permission === 'granted') {
+                swRegistration.showNotification(title, {
+                    body: body,
+                    icon: 'https://cdn-icons-png.flaticon.com/512/3652/3652191.png', // घड्याळाचे चिन्ह
+                    vibrate: [300, 100, 300], // मोबाईल व्हायब्रेट होईल (Alert pattern)
+                    tag: 'routine-alert',
+                    renotify: true
+                });
+            }
+        }
+    </script>
+</body>
+</html>
